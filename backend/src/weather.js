@@ -5,19 +5,14 @@
 //   /v1/forecast        → current conditions + 7-day forecast
 //   /v1/archive         → ERA5 historical data (1940-present, ~5 day lag)
 //
-// We make 3-4 parallel fetches then process into a single unified payload.
+// Climatology uses 80 years of data (matching the reference project).
+// "This day in history" uses a ±4 day window around today's date per year,
+// which smooths out missing data and matches real-world climate comparison practice.
 
 const FORECAST_BASE = "https://api.open-meteo.com/v1/forecast";
 const ARCHIVE_BASE = "https://archive-api.open-meteo.com/v1/archive";
 
 // ─── HELPERS ─────────────────────────────────────────────────────────────────
-
-function toF(c) {
-  return Math.round((c * 9) / 5 + 32);
-}
-function mmToIn(mm) {
-  return Math.round((mm / 25.4) * 100) / 100;
-}
 
 function dateStr(d) {
   return d.toISOString().split("T")[0];
@@ -26,12 +21,6 @@ function dateStr(d) {
 function daysAgo(n) {
   const d = new Date();
   d.setDate(d.getDate() - n);
-  return d;
-}
-
-function yearsAgo(n) {
-  const d = new Date();
-  d.setFullYear(d.getFullYear() - n);
   return d;
 }
 
@@ -113,7 +102,6 @@ export async function fetchCurrentAndForecast(lat, lon) {
 }
 
 // ─── HISTORICAL: CURRENT YEAR ─────────────────────────────────────────────────
-// Fetches daily data for the current year so far (for trend charts).
 
 export async function fetchThisYear(lat, lon) {
   const start = `${new Date().getFullYear()}-01-01`;
@@ -147,16 +135,15 @@ export async function fetchThisYear(lat, lon) {
 }
 
 // ─── HISTORICAL CLIMATE NORMALS ───────────────────────────────────────────────
-// Fetches 30 years of daily data and computes:
+// Fetches 80 years of ERA5 daily data and computes:
 //   - Monthly normals (avg high, avg low, avg precip)
-//   - "This week" history (last 40 years, same week)
-//   - Annual anomaly (per-year mean vs 30yr baseline)
-//   - Daily anomaly calendar for the current year
+//   - "This day in history" — ±4 day window per year (from reference project)
+//   - Annual anomaly (per-year mean vs 80yr baseline)
+//   - Daily normals (for anomaly calendar)
 
 export async function fetchClimatology(lat, lon) {
-  // 30 years of history for normals (ERA5)
-  const endYear = new Date().getFullYear() - 1; // last full year
-  const startYear = endYear - 29; // 30 years
+  const endYear = new Date().getFullYear() - 1;
+  const startYear = endYear - 79; // 80 years
 
   const params = new URLSearchParams({
     latitude: lat,
@@ -175,7 +162,7 @@ export async function fetchClimatology(lat, lon) {
   const data = await fetchJSON(`${ARCHIVE_BASE}?${params}`);
   const d = data.daily;
 
-  // Index daily observations
+  // Index all daily observations by date string for O(1) lookup
   const byDate = {};
   for (let i = 0; i < d.time.length; i++) {
     byDate[d.time[i]] = {
@@ -186,15 +173,15 @@ export async function fetchClimatology(lat, lon) {
     };
   }
 
-  // ── Monthly normals ──
+  // ── Monthly normals ──────────────────────────────────────────────────────
   const monthlyAccum = Array.from({ length: 12 }, () => ({
     highs: [], lows: [], means: [], precips: [],
   }));
   for (const [date, v] of Object.entries(byDate)) {
     const month = parseInt(date.split("-")[1]) - 1;
-    if (v.high != null) monthlyAccum[month].highs.push(v.high);
-    if (v.low != null) monthlyAccum[month].lows.push(v.low);
-    if (v.mean != null) monthlyAccum[month].means.push(v.mean);
+    if (v.high != null)   monthlyAccum[month].highs.push(v.high);
+    if (v.low != null)    monthlyAccum[month].lows.push(v.low);
+    if (v.mean != null)   monthlyAccum[month].means.push(v.mean);
     if (v.precip != null) monthlyAccum[month].precips.push(v.precip);
   }
   const avg = (arr) => arr.length ? Math.round(arr.reduce((a, b) => a + b, 0) / arr.length) : null;
@@ -205,12 +192,10 @@ export async function fetchClimatology(lat, lon) {
     normalHigh: avg(m.highs),
     normalLow: avg(m.lows),
     normalMean: avg(m.means),
-    // Average monthly total precip = avg daily * days in month
-    normalPrecip: Math.round(sum(m.precips) / 30 * 10) / 10,
+    normalPrecip: Math.round(sum(m.precips) / 80 * 10) / 10,
   }));
 
-  // ── Annual anomalies ──
-  // Overall 30yr baseline mean
+  // ── Annual anomalies ─────────────────────────────────────────────────────
   const allMeans = Object.values(byDate).map((v) => v.mean).filter(Boolean);
   const baseline = allMeans.reduce((a, b) => a + b, 0) / allMeans.length;
 
@@ -227,41 +212,55 @@ export async function fetchClimatology(lat, lon) {
     }))
     .sort((a, b) => a.year - b.year);
 
-  // ── "This week" history ──
+  // ── "This day in history" — ±4 day window per year ──────────────────────
+  // For each of the past 80 years, average the temps in a 7-day window
+  // centered on today's date. This is ported from the reference project's
+  // generateDateRanges() approach and handles leap years cleanly.
   const today = new Date();
-  const weekOfYear = Math.ceil(
-    ((today - new Date(today.getFullYear(), 0, 1)) / 86400000 + 1) / 7
-  );
-
   const thisWeekHistory = [];
+
   for (let yr = startYear; yr <= endYear; yr++) {
-    // Get all dates in the same week of that year
-    const weekTemps = [];
-    for (let doy = (weekOfYear - 1) * 7; doy < weekOfYear * 7; doy++) {
-      const d2 = new Date(yr, 0, 1 + doy);
-      const key = dateStr(d2);
-      if (byDate[key]?.mean != null) weekTemps.push(byDate[key].mean);
+    const baseDate = new Date(today);
+    baseDate.setFullYear(yr);
+
+    // Handle Feb 29 in non-leap years
+    if (today.getMonth() === 1 && today.getDate() === 29) {
+      baseDate.setMonth(1);
+      baseDate.setDate(29);
+      if (baseDate.getMonth() !== 1) {
+        baseDate.setMonth(2);
+        baseDate.setDate(1);
+      }
     }
-    if (weekTemps.length) {
+
+    // ±4 day window (7 days total) — same as reference project
+    const windowTemps = [];
+    for (let offset = -4; offset <= 3; offset++) {
+      const d2 = new Date(baseDate);
+      d2.setDate(baseDate.getDate() + offset);
+      const key = dateStr(d2);
+      if (byDate[key]?.mean != null) windowTemps.push(byDate[key].mean);
+    }
+
+    if (windowTemps.length) {
       thisWeekHistory.push({
         year: yr,
-        avgTemp: Math.round(weekTemps.reduce((a, b) => a + b, 0) / weekTemps.length),
+        avgTemp: Math.round(windowTemps.reduce((a, b) => a + b, 0) / windowTemps.length),
+        maxTemp: Math.max(...windowTemps),
       });
     }
   }
 
-  // Compute records for this week
-  const weekTemps = thisWeekHistory.map((w) => w.avgTemp);
-  const weekRecord = {
-    high: Math.max(...weekTemps),
-    highYear: thisWeekHistory.find((w) => w.avgTemp === Math.max(...weekTemps))?.year,
-    low: Math.min(...weekTemps),
-    lowYear: thisWeekHistory.find((w) => w.avgTemp === Math.min(...weekTemps))?.year,
-    avg: Math.round(weekTemps.reduce((a, b) => a + b, 0) / weekTemps.length),
-  };
+  const periodTemps = thisWeekHistory.map((w) => w.avgTemp);
+  const weekRecord = periodTemps.length ? {
+    high: Math.max(...periodTemps),
+    highYear: thisWeekHistory.find((w) => w.avgTemp === Math.max(...periodTemps))?.year,
+    low: Math.min(...periodTemps),
+    lowYear: thisWeekHistory.find((w) => w.avgTemp === Math.min(...periodTemps))?.year,
+    avg: Math.round(periodTemps.reduce((a, b) => a + b, 0) / periodTemps.length),
+  } : null;
 
-  // ── Daily normals for anomaly calendar ──
-  // (day-of-year averages over 30 years)
+  // ── Daily normals for anomaly calendar ──────────────────────────────────
   const doyAccum = {};
   for (const [date, v] of Object.entries(byDate)) {
     const [, mm, dd] = date.split("-");
@@ -281,11 +280,11 @@ export async function fetchClimatology(lat, lon) {
     weekRecord,
     dailyNormals,
     baseline: Math.round(baseline),
+    yearsOfData: endYear - startYear + 1,
   };
 }
 
 // ─── ANOMALY CALENDAR ─────────────────────────────────────────────────────────
-// Given this year's daily data and daily normals, compute per-day anomalies.
 
 export function computeAnomalyCalendar(thisYearData, dailyNormals) {
   return thisYearData.map((d) => {
@@ -296,16 +295,17 @@ export function computeAnomalyCalendar(thisYearData, dailyNormals) {
       date: d.date,
       mean: d.mean,
       normal: normal ?? null,
-      anomaly: normal != null && d.mean != null ? Math.round((d.mean - normal) * 10) / 10 : null,
+      anomaly: normal != null && d.mean != null
+        ? Math.round((d.mean - normal) * 10) / 10
+        : null,
     };
   });
 }
 
 // ─── PERCENTILE RANK ──────────────────────────────────────────────────────────
-// Where does today's temp rank among all historical same-day values?
+// Where does today's temp rank among all 80 years of same-period values?
 
 export function computePercentile(currentTemp, dailyNormals, thisWeekHistory) {
-  // Use this week's historical distribution
   const temps = thisWeekHistory.map((w) => w.avgTemp).sort((a, b) => a - b);
   if (!temps.length) return 50;
   const below = temps.filter((t) => t <= currentTemp).length;
