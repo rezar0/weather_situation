@@ -177,7 +177,7 @@ function aggregateMonthly(dailyData) {
 }
 
 // ─── START ────────────────────────────────────────────────────────────────────
-app.listen(PORT, () => {
+app.listen(PORT, "0.0.0.0", () => {
   console.log(`✅ Weather API running on port ${PORT}`);
   console.log(`   Redis: ${process.env.UPSTASH_REDIS_REST_URL ? "connected" : "not configured (caching disabled)"}`);
 });
