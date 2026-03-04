@@ -1,14 +1,20 @@
 {
-  "name": "weather-normal-api",
+  "name": "weather-normal-frontend",
   "version": "1.0.0",
   "type": "module",
   "scripts": {
-    "start": "node src/index.js",
-    "dev": "node --watch src/index.js"
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview"
   },
   "dependencies": {
-    "@upstash/redis": "^1.36.3",
-    "cors": "^2.8.5",
-    "express": "^4.21.2"
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "recharts": "^2.13.3",
+    "serve": "^14.2.4"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-react": "^4.3.4",
+    "vite": "^6.0.7"
   }
 }
