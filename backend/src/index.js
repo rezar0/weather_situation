@@ -24,7 +24,12 @@ app.use(express.json());
 
 // ─── HEALTH CHECK ─────────────────────────────────────────────────────────────
 app.get("/health", async (req, res) => {
-  const locationCount = await getLocationCount();
+  let locationCount = 0;
+  try {
+    locationCount = await getLocationCount();
+  } catch (e) {
+    // Redis misconfigured — dont crash the healthcheck
+  }
   res.json({ status: "ok", locationsInDb: locationCount });
 });
 
