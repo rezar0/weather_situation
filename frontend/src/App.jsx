@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import {
   AreaChart, Area, BarChart, Bar, LineChart, Line,
   XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceLine,
@@ -85,11 +85,26 @@ function LoadingScreen({ query }) {
 }
 
 // ─── LANDING PAGE ─────────────────────────────────────────────────────────────
+const API_BASE = import.meta.env.VITE_API_URL || "/api";
+
 function Landing({ onSearch }) {
   const [query, setQuery] = useState("");
   const [focused, setFocused] = useState(false);
+  const [recents, setRecents] = useState([]);
 
   const go = () => query.trim() && onSearch(query);
+
+  // Fetch recent successful searches on mount
+  useEffect(() => {
+    fetch(`${API_BASE}/recent`)
+      .then(r => r.json())
+      .then(d => { if (d.locations?.length) setRecents(d.locations); })
+      .catch(() => {});
+  }, []);
+
+  const suggestions = recents.length
+    ? recents.map(l => ({ label: l.displayName, query: l.displayName }))
+    : ["Austin, TX", "Portland, OR", "Miami, FL", "Chicago, IL", "94103"].map(l => ({ label: l, query: l }));
 
   return (
     <div style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", padding: 40, position: "relative", overflow: "hidden" }}>
@@ -119,12 +134,15 @@ function Landing({ onSearch }) {
           </button>
         </div>
 
+        <div style={{ marginBottom: 8, fontSize: 10, color: T.dim, letterSpacing: 2, textTransform: "uppercase" }}>
+          {recents.length ? "Recent searches" : "Try these"}
+        </div>
         <div style={{ display: "flex", gap: 10, justifyContent: "center", flexWrap: "wrap" }}>
-          {["Austin, TX", "Portland, OR", "Miami, FL", "Chicago, IL", "94103"].map(ex => (
-            <button key={ex} onClick={() => onSearch(ex)} style={{ background: "none", border: `1px solid ${T.border}`, color: T.muted, padding: "6px 14px", borderRadius: 20, fontSize: 12, cursor: "pointer", fontFamily: "inherit", transition: "all 0.15s" }}
+          {suggestions.map(s => (
+            <button key={s.label} onClick={() => onSearch(s.query)} style={{ background: "none", border: `1px solid ${T.border}`, color: T.muted, padding: "6px 14px", borderRadius: 20, fontSize: 12, cursor: "pointer", fontFamily: "inherit", transition: "all 0.15s" }}
               onMouseEnter={e => { e.currentTarget.style.borderColor = T.accent; e.currentTarget.style.color = T.accent; }}
               onMouseLeave={e => { e.currentTarget.style.borderColor = T.border; e.currentTarget.style.color = T.muted; }}>
-              {ex}
+              {s.label}
             </button>
           ))}
         </div>

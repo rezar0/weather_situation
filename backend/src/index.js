@@ -14,6 +14,7 @@ import {
   cacheSet,
   recordLocation,
   getLocationCount,
+  getRecentLocations,
 } from "./cache.js";
 
 const app = express();
@@ -31,6 +32,16 @@ app.get("/health", async (req, res) => {
     // Redis misconfigured — dont crash the healthcheck
   }
   res.json({ status: "ok", locationsInDb: locationCount });
+});
+
+// ─── RECENT LOCATIONS ────────────────────────────────────────────────────────
+app.get("/recent", async (req, res) => {
+  try {
+    const locations = await getRecentLocations();
+    res.json({ locations });
+  } catch (err) {
+    res.json({ locations: [] });
+  }
 });
 
 // ─── MAIN WEATHER ENDPOINT ────────────────────────────────────────────────────
@@ -65,8 +76,7 @@ app.get("/weather", async (req, res) => {
     }
     const { lat, lon, cacheKey } = location;
 
-    // Record for our growing location DB
-    recordLocation(location); // fire and forget
+    // recordLocation is called after successful response below
 
     // ── 2. Current + Forecast (30min cache) ────────────────────────────────
     const currentKey = `current:${cacheKey}`;
@@ -140,6 +150,9 @@ app.get("/weather", async (req, res) => {
         baseline: climate.baseline,
       },
     });
+
+    // Record AFTER successful response — only real successful lookups go in recents
+    recordLocation(location);
   } catch (err) {
     console.error("Weather endpoint error:", err);
     res.status(500).json({ error: err.message });
