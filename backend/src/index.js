@@ -20,7 +20,20 @@ import {
 const app = express();
 const PORT = process.env.PORT || 3001;
 
-app.use(cors());
+app.use(cors({
+  origin: (origin, callback) => {
+    // Allow requests with no origin (curl, Postman, server-to-server)
+    if (!origin) return callback(null, true);
+    // Allow any Railway subdomain, localhost, and the production domain
+    const allowed = [
+      /\.railway\.app$/,
+      /^http:\/\/localhost/,
+    ];
+    if (allowed.some(r => r.test(origin))) return callback(null, true);
+    callback(new Error("CORS: origin not allowed: " + origin));
+  },
+  methods: ["GET"],
+}));
 app.use(express.json());
 
 // ─── HEALTH CHECK ─────────────────────────────────────────────────────────────
