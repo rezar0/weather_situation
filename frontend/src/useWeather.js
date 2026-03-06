@@ -24,5 +24,6 @@ export function useWeather() {
     }
   }, []);
 
-  return { data, loading, error, fetch: fetch_ };
+  const reset = () => { setData(null); setError(null); setLoading(false); };
+  return { data, loading, error, fetch: fetch_, reset };
 }

@@ -95,9 +95,13 @@ function Landing({ onSearch }) {
 
   // Fetch recent successful searches on mount
   useEffect(() => {
+    console.log("[recents] fetching from:", `${API_BASE}/recent`);
     fetch(`${API_BASE}/recent`)
       .then(r => r.json())
-      .then(d => { if (d.locations?.length) setRecents(d.locations); })
+      .then(d => {
+        console.log("[recents] got:", d);
+        if (d.locations?.length) setRecents(d.locations);
+      })
       .catch(e => console.warn("[recents] fetch failed:", e.message));
   }, []);
 
@@ -151,7 +155,7 @@ function Landing({ onSearch }) {
 }
 
 // ─── DASHBOARD ────────────────────────────────────────────────────────────────
-function Dashboard({ data, onSearch, nerdMode, setNerdMode }) {
+function Dashboard({ data, onSearch, goHome, nerdMode, setNerdMode }) {
   const [tab, setTab] = useState("overview");
   const [trendView, setTrendView] = useState("month");
   const [searchQ, setSearchQ] = useState("");
@@ -195,7 +199,9 @@ function Dashboard({ data, onSearch, nerdMode, setNerdMode }) {
       {/* TOP BAR */}
       <div style={{ borderBottom: `1px solid ${T.border}`, padding: "12px 28px", display: "flex", alignItems: "center", justifyContent: "space-between", background: `${T.bg}ee`, backdropFilter: "blur(10px)", position: "sticky", top: 0, zIndex: 100, flexWrap: "wrap", gap: 10 }}>
         <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
-          <span style={{ fontFamily: "'Playfair Display', serif", fontWeight: 900, fontSize: 17, color: T.accent, fontStyle: "italic" }}>normal?</span>
+          <button onClick={goHome} style={{ background: "none", border: "none", cursor: "pointer", padding: 0 }}>
+            <span style={{ fontFamily: "'Playfair Display', serif", fontWeight: 900, fontSize: 17, color: T.accent, fontStyle: "italic", letterSpacing: -0.5 }}>is this weather <em>normal?</em></span>
+          </button>
           <div style={{ display: "flex", gap: 8 }}>
             <input value={searchQ} onChange={e => setSearchQ(e.target.value)}
               onKeyDown={e => e.key === "Enter" && searchQ.trim() && onSearch(searchQ)}
@@ -487,13 +493,18 @@ function Dashboard({ data, onSearch, nerdMode, setNerdMode }) {
 
 // ─── ROOT APP ─────────────────────────────────────────────────────────────────
 export default function App() {
-  const { data, loading, error, fetch } = useWeather();
+  const { data, loading, error, fetch, reset } = useWeather();
   const [lastQuery, setLastQuery] = useState("");
   const [nerdMode, setNerdMode] = useState(false);
 
   const handleSearch = (q) => {
     setLastQuery(q);
     fetch(q);
+  };
+
+  const goHome = () => {
+    reset();
+    setLastQuery("");
   };
 
   return (
@@ -508,11 +519,11 @@ export default function App() {
             <div style={{ fontSize: 40 }}>⚠️</div>
             <div style={{ fontFamily: "'Playfair Display', serif", fontSize: 20, color: T.warm }}>Couldn't find that location</div>
             <div style={{ color: T.muted, fontSize: 14 }}>{error}</div>
-            <button onClick={() => window.location.reload()} style={{ marginTop: 10, padding: "10px 22px", background: T.accent, color: "#08080f", border: "none", borderRadius: 8, fontWeight: 700, cursor: "pointer", fontFamily: "inherit" }}>Try again</button>
+            <button onClick={goHome} style={{ marginTop: 10, padding: "10px 22px", background: T.accent, color: "#08080f", border: "none", borderRadius: 8, fontWeight: 700, cursor: "pointer", fontFamily: "inherit" }}>Try again</button>
           </div>
         )}
         {!loading && !error && !data && <Landing onSearch={handleSearch} />}
-        {!loading && !error && data && <Dashboard data={data} onSearch={handleSearch} nerdMode={nerdMode} setNerdMode={setNerdMode} />}
+        {!loading && !error && data && <Dashboard data={data} onSearch={handleSearch} goHome={goHome} nerdMode={nerdMode} setNerdMode={setNerdMode} />}
       </div>
     </div>
   );
