@@ -1,9 +1,6 @@
 // src/useWeather.js
 import { useState, useCallback } from "react";
-
-const API_BASE = import.meta.env.VITE_API_URL
-  ? import.meta.env.VITE_API_URL
-  : "/api";
+import { API_BASE } from "./config.js";
 
 export function useWeather() {
   const [data, setData] = useState(null);

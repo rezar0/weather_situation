@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { API_BASE } from "./config.js";
 import {
   AreaChart, Area, BarChart, Bar, LineChart, Line,
   XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceLine,
@@ -85,8 +86,6 @@ function LoadingScreen({ query }) {
 }
 
 // ─── LANDING PAGE ─────────────────────────────────────────────────────────────
-const API_BASE = import.meta.env.VITE_API_URL || "/api";
-
 function Landing({ onSearch }) {
   const [query, setQuery] = useState("");
   const [focused, setFocused] = useState(false);
@@ -99,7 +98,7 @@ function Landing({ onSearch }) {
     fetch(`${API_BASE}/recent`)
       .then(r => r.json())
       .then(d => { if (d.locations?.length) setRecents(d.locations); })
-      .catch(() => {});
+      .catch(e => console.warn("[recents] fetch failed:", e.message));
   }, []);
 
   const suggestions = recents.length
