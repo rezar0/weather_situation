@@ -1,10 +1,12 @@
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 
-export default defineConfig(({ mode }) => ({
+export default defineConfig({
   plugins: [react()],
-  // In dev, proxy /api to the local backend
-  // In production, VITE_API_URL is baked in at build time via useWeather.js
+  preview: {
+    port: parseInt(process.env.PORT) || 8080,
+    host: "0.0.0.0",
+  },
   server: {
     proxy: {
       "/api": {
@@ -14,4 +16,4 @@ export default defineConfig(({ mode }) => ({
       },
     },
   },
-}));
+});
