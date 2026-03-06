@@ -3,6 +3,6 @@ builder = "NIXPACKS"
 buildCommand = "npm install && npm run build"
 
 [deploy]
-startCommand = "./node_modules/.bin/vite preview --port ${PORT:-8080} --host 0.0.0.0"
+startCommand = "node server.js"
 restartPolicyType = "ON_FAILURE"
 restartPolicyMaxRetries = 3
