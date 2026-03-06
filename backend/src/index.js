@@ -20,22 +20,11 @@ import {
 const app = express();
 const PORT = process.env.PORT || 8080;
 
-app.listen(PORT, "0.0.0.0", () => {
-  console.log(`✅ Weather API running on port ${PORT}`);
-  console.log(
-    `   Redis: ${
-      process.env.UPSTASH_REDIS_REST_URL
-        ? "connected"
-        : "not configured (caching disabled)"
-    }`
-  );
-});
-
 app.use(cors({
   origin: (origin, callback) => {
     // Allow requests with no origin (curl, Postman, server-to-server)
     if (!origin) return callback(null, true);
-    // Allow any Railway subdomain, localhost, and the production domain
+    // Allow any Railway subdomain and localhost
     const allowed = [
       /\.railway\.app$/,
       /^http:\/\/localhost/,
@@ -93,8 +82,6 @@ app.get("/weather", async (req, res) => {
       await cacheSet(geoKey, location, 7 * 24 * 3600); // 7 days
     }
     const { lat, lon, cacheKey } = location;
-
-    // recordLocation is called after successful response below
 
     // ── 2. Current + Forecast (30min cache) ────────────────────────────────
     const currentKey = `current:${cacheKey}`;
