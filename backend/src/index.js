@@ -37,14 +37,8 @@ app.use(cors({
 app.use(express.json());
 
 // ─── HEALTH CHECK ─────────────────────────────────────────────────────────────
-app.get("/health", async (req, res) => {
-  let locationCount = 0;
-  try {
-    locationCount = await getLocationCount();
-  } catch (e) {
-    // Redis misconfigured — dont crash the healthcheck
-  }
-  res.json({ status: "ok", locationsInDb: locationCount });
+app.get("/health", (req, res) => {
+  res.status(200).send("ok");
 });
 
 // ─── RECENT LOCATIONS ────────────────────────────────────────────────────────
